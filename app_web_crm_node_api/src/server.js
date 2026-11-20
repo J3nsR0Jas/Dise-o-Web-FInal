@@ -22,6 +22,13 @@ const pool = new pg.Pool({
 const inicializarBD = async () => {
   try {
     await pool.query(`
+
+      DROP TABLE IF EXISTS citas_essalud CASCADE;
+      DROP TABLE IF EXISTS denuncias_digitales CASCADE;
+      DROP TABLE IF EXISTS comerciantes_interesados CASCADE;
+      DROP TABLE IF EXISTS usuario_rol CASCADE;
+      DROP TABLE IF EXISTS usuarios CASCADE;
+
       CREATE TABLE IF NOT EXISTS usuarios (
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(120) NOT NULL,
