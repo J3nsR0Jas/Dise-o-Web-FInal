@@ -22,13 +22,6 @@ const pool = new pg.Pool({
 const inicializarBD = async () => {
   try {
     await pool.query(`
-
-      DROP TABLE IF EXISTS citas_essalud CASCADE;
-      DROP TABLE IF EXISTS denuncias_digitales CASCADE;
-      DROP TABLE IF EXISTS comerciantes_interesados CASCADE;
-      DROP TABLE IF EXISTS usuario_rol CASCADE;
-      DROP TABLE IF EXISTS usuarios CASCADE;
-
       CREATE TABLE IF NOT EXISTS usuarios (
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(120) NOT NULL,
@@ -80,47 +73,60 @@ const inicializarBD = async () => {
         estado VARCHAR(40) DEFAULT 'registrado',
         creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
-      ALTER TABLE comerciantes_interesados ADD COLUMN IF NOT EXISTS foto_puesto TEXT;
-      ALTER TABLE denuncias_digitales ADD COLUMN IF NOT EXISTS evidencia_imagen TEXT;
     `);
 
-    const { rows } = await pool.query('SELECT COUNT(*) FROM usuarios');
-    if (Number(rows[0].count) === 0) {
-      const passHash = await bcrypt.hash('1234', 10);
+    const passHash = await bcrypt.hash('1234', 10);
 
+    // 1. Comerciante
+    const uComCheck = await pool.query("SELECT id FROM usuarios WHERE email = 'cliente1@correo.com'");
+    if (uComCheck.rows.length === 0) {
       const uCom = await pool.query(
         "INSERT INTO usuarios (nombre, email, password) VALUES ('Cliente 1 (Comerciante)', 'cliente1@correo.com', $1) RETURNING id",
         [passHash]
       );
-      const idComUser = uCom.rows[0].id;
       await pool.query(
         "INSERT INTO usuario_rol VALUES ($1,'mercado','cliente'), ($1,'pnp','cliente'), ($1,'essalud','cliente')",
-        [idComUser]
+        [uCom.rows[0].id]
       );
       await pool.query(
         "INSERT INTO comerciantes_interesados (id_usuario, nombre, dni, puesto, rubro, telefono) VALUES ($1, 'Cliente 1', '71234567', 'Puesto B-14', 'Abarrotes', '987654321')",
-        [idComUser]
+        [uCom.rows[0].id]
       );
+    }
 
-      const uEmp = await pool.query(
-        "INSERT INTO usuarios (nombre, email, password) VALUES ('Empleado PNP / EsSalud', 'empleado1@pnp.gob.pe', $1) RETURNING id",
+    // 2. Empleado SOLO PNP
+    const uPnpCheck = await pool.query("SELECT id FROM usuarios WHERE email = 'empleado.pnp@pnp.gob.pe'");
+    if (uPnpCheck.rows.length === 0) {
+      const uPnp = await pool.query(
+        "INSERT INTO usuarios (nombre, email, password) VALUES ('Efectivo PNP Central', 'empleado.pnp@pnp.gob.pe', $1) RETURNING id",
         [passHash]
       );
-      await pool.query(
-        "INSERT INTO usuario_rol VALUES ($1,'pnp','empleado'), ($1,'essalud','empleado')",
-        [uEmp.rows[0].id]
-      );
+      await pool.query("INSERT INTO usuario_rol VALUES ($1,'pnp','empleado')", [uPnp.rows[0].id]);
+    }
 
+    // 3. Empleado SOLO EsSalud
+    const uEssCheck = await pool.query("SELECT id FROM usuarios WHERE email = 'empleado.essalud@essalud.gob.pe'");
+    if (uEssCheck.rows.length === 0) {
+      const uEss = await pool.query(
+        "INSERT INTO usuarios (nombre, email, password) VALUES ('Personal EsSalud Norte Chico', 'empleado.essalud@essalud.gob.pe', $1) RETURNING id",
+        [passHash]
+      );
+      await pool.query("INSERT INTO usuario_rol VALUES ($1,'essalud','empleado')", [uEss.rows[0].id]);
+    }
+
+    // 4. Admin SOLO Mercado
+    const uAdmCheck = await pool.query("SELECT id FROM usuarios WHERE email = 'admin@mercado.pe'");
+    if (uAdmCheck.rows.length === 0) {
       const uAdm = await pool.query(
-        "INSERT INTO usuarios (nombre, email, password) VALUES ('Admin Mercado', 'admin@mercado.pe', $1) RETURNING id",
+        "INSERT INTO usuarios (nombre, email, password) VALUES ('Admin Mercado Mayorista', 'admin@mercado.pe', $1) RETURNING id",
         [passHash]
       );
-      await pool.query(
-        "INSERT INTO usuario_rol VALUES ($1,'mercado','administrador')",
-        [uAdm.rows[0].id]
-      );
+      await pool.query("INSERT INTO usuario_rol VALUES ($1,'mercado','administrador')", [uAdm.rows[0].id]);
+    }
 
+    // Denuncia inicial de ejemplo si no hay ninguna
+    const denCheck = await pool.query('SELECT COUNT(*) FROM denuncias_digitales');
+    if (Number(denCheck.rows[0].count) === 0) {
       const com2 = await pool.query(
         "INSERT INTO comerciantes_interesados (nombre, dni, puesto, rubro, telefono) VALUES ('Cliente 3', '74561238', 'Puesto C-02', 'Carnes y Aves', '912345678') RETURNING id"
       );

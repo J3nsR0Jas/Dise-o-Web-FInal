@@ -12,9 +12,9 @@ const BADGE_STYLE = {
 
 export default function App() {
   const [usuario, setUsuario] = useState(null);
-  const [cred, setCred] = useState({ email: 'empleado1@pnp.gob.pe', password: '1234' });
+  const [cred, setCred] = useState({ email: 'empleado.pnp@pnp.gob.pe', password: '1234' });
   const [errorLogin, setErrorLogin] = useState('');
-  const [moduloActivo, setModuloActivo] = useState('pnp');
+  const [moduloActivo, setModuloActivo] = useState('');
   const [toast, setToast] = useState('');
 
   const [denuncias, setDenuncias] = useState([]);
@@ -26,7 +26,7 @@ export default function App() {
     asegurado: '',
     motivo: '',
     especialidad: 'Emergencia',
-    fecha_cita: '05/11/2026 · 09:30',
+    fecha_cita: '21/11/2026 · 09:30',
   });
 
   const [nuevoCom, setNuevoCom] = useState({
@@ -56,13 +56,21 @@ export default function App() {
         setErrorLogin(data.error || 'Credenciales inválidas');
         return;
       }
-      setUsuario(data.usuario);
+
       const roles = data.usuario.roles || [];
-      if (roles.some((r) => r.modulo === 'mercado' && r.rol === 'administrador')) {
-        setModuloActivo('mercado-seguridad');
-      } else {
-        setModuloActivo('pnp');
+      const tienePnp = roles.some((r) => r.modulo === 'pnp' && r.rol === 'empleado');
+      const tieneEssalud = roles.some((r) => r.modulo === 'essalud' && r.rol === 'empleado');
+      const tieneAdminMercado = roles.some((r) => r.modulo === 'mercado' && r.rol === 'administrador');
+
+      if (!tienePnp && !tieneEssalud && !tieneAdminMercado) {
+        setErrorLogin('Esta cuenta no tiene permisos administrativos ni de empleado.');
+        return;
       }
+
+      setUsuario(data.usuario);
+      if (tienePnp) setModuloActivo('pnp');
+      else if (tieneEssalud) setModuloActivo('essalud');
+      else if (tieneAdminMercado) setModuloActivo('mercado-seguridad');
     } catch {
       setErrorLogin('Error de conexión con Render. Intenta de nuevo en unos segundos.');
     }
@@ -126,10 +134,9 @@ export default function App() {
     });
     const citaCreada = await res.json();
     if (res.ok) {
-      mostrarToast(`Cita agendada · ${citaCreada.codigo}`);
+      mostrarToast(`Cita agendada y enviada a EsSalud · ${citaCreada.codigo}`);
       setDerivandoDenuncia(null);
       await cargarTodo();
-      setModuloActivo('essalud');
     }
   };
 
@@ -171,7 +178,7 @@ export default function App() {
         <div style={st.loginCard}>
           <span style={st.kicker}>GRUPO 4 · MERCADO SEGURO</span>
           <h1 style={st.loginTitle}>Panel Institucional</h1>
-          <p style={st.loginSub}>PNP · EsSalud · Administración de Mercado</p>
+          <p style={st.loginSub}>Ingresa con tu cuenta de PNP, EsSalud o Administración</p>
 
           <form onSubmit={manejarSubmitLogin} style={st.form}>
             <label style={st.label}>Correo institucional</label>
@@ -195,26 +202,38 @@ export default function App() {
           </form>
 
           <div style={st.quickBox}>
-            <div style={st.quickTitle}>Accesos rápidos (clave: 1234):</div>
+            <div style={st.quickTitle}>Accesos por entidad (clave: 1234):</div>
             <button
               type="button"
-              onClick={() => loginConCorreo('empleado1@pnp.gob.pe', '1234')}
+              onClick={() => loginConCorreo('empleado.pnp@pnp.gob.pe', '1234')}
               style={st.quickBtn}
             >
-              🚓 Entrar como Empleado PNP / EsSalud
+              🚓 Entrar solo como PNP
+            </button>
+            <button
+              type="button"
+              onClick={() => loginConCorreo('empleado.essalud@essalud.gob.pe', '1234')}
+              style={st.quickBtn}
+            >
+              🏥 Entrar solo como EsSalud
             </button>
             <button
               type="button"
               onClick={() => loginConCorreo('admin@mercado.pe', '1234')}
               style={st.quickBtn}
             >
-              🏢 Entrar como Admin Mercado
+              🏢 Entrar solo como Admin Mercado
             </button>
           </div>
         </div>
       </div>
     );
   }
+
+  const rolesUsuario = usuario.roles || [];
+  const puedeVerPnp = rolesUsuario.some((r) => r.modulo === 'pnp' && r.rol === 'empleado');
+  const puedeVerEssalud = rolesUsuario.some((r) => r.modulo === 'essalud' && r.rol === 'empleado');
+  const puedeVerMercado = rolesUsuario.some((r) => r.modulo === 'mercado' && r.rol === 'administrador');
 
   const maxDenuncias = Math.max(1, ...rankingSeguridad.map((r) => Number(r.total_denuncias || 0)));
 
@@ -223,7 +242,7 @@ export default function App() {
       <header style={st.navbar}>
         <div>
           <strong>Grupo 4 · Mercado Seguro</strong>
-          <span style={st.navTag}>Panel Operativo & Supervisión</span>
+          <span style={st.navTag}>Vista Exclusiva por Rol</span>
         </div>
         <div style={st.navRight}>
           <span style={st.userBadge}>{usuario.nombre}</span>
@@ -233,32 +252,38 @@ export default function App() {
 
       <div style={st.body}>
         <aside style={st.sidebar}>
-          <div style={st.menuTitle}>MÓDULOS DEL SISTEMA</div>
-          <button
-            onClick={() => setModuloActivo('pnp')}
-            style={moduloActivo === 'pnp' ? st.menuActive : st.menuItem}
-          >
-            🚓 Central de Emergencias PNP
-            <small style={st.menuSub}>Panel de denuncias (empleado)</small>
-          </button>
-          <button
-            onClick={() => setModuloActivo('essalud')}
-            style={moduloActivo === 'essalud' ? st.menuActive : st.menuItem}
-          >
-            🏥 EsSalud Norte Chico
-            <small style={st.menuSub}>Gestión de citas (empleado)</small>
-          </button>
-          <button
-            onClick={() => setModuloActivo('mercado-seguridad')}
-            style={moduloActivo === 'mercado-seguridad' ? st.menuActive : st.menuItem}
-          >
-            📊 Mercado Mayorista
-            <small style={st.menuSub}>Reporte seguridad (admin)</small>
-          </button>
+          <div style={st.menuTitle}>MI MÓDULO ASIGNADO</div>
+          {puedeVerPnp && (
+            <button
+              onClick={() => setModuloActivo('pnp')}
+              style={moduloActivo === 'pnp' ? st.menuActive : st.menuItem}
+            >
+              🚓 Central de Emergencias PNP
+              <small style={st.menuSub}>Panel de denuncias (empleado)</small>
+            </button>
+          )}
+          {puedeVerEssalud && (
+            <button
+              onClick={() => setModuloActivo('essalud')}
+              style={moduloActivo === 'essalud' ? st.menuActive : st.menuItem}
+            >
+              🏥 EsSalud Norte Chico
+              <small style={st.menuSub}>Gestión de citas (empleado)</small>
+            </button>
+          )}
+          {puedeVerMercado && (
+            <button
+              onClick={() => setModuloActivo('mercado-seguridad')}
+              style={moduloActivo === 'mercado-seguridad' ? st.menuActive : st.menuItem}
+            >
+              📊 Mercado Mayorista
+              <small style={st.menuSub}>Reporte seguridad (admin)</small>
+            </button>
+          )}
         </aside>
 
         <main style={st.main}>
-          {moduloActivo === 'pnp' && (
+          {moduloActivo === 'pnp' && puedeVerPnp && (
             <div>
               <div style={st.rowBetween}>
                 <div>
@@ -398,7 +423,7 @@ export default function App() {
             </div>
           )}
 
-          {moduloActivo === 'essalud' && (
+          {moduloActivo === 'essalud' && puedeVerEssalud && (
             <div>
               <div style={st.rowBetween}>
                 <div>
@@ -448,7 +473,7 @@ export default function App() {
             </div>
           )}
 
-          {moduloActivo === 'mercado-seguridad' && (
+          {moduloActivo === 'mercado-seguridad' && puedeVerMercado && (
             <div>
               <div style={st.crumb}>Mercado Mayorista › Seguridad por comerciante</div>
               <h2 style={st.h2}>Denuncias por Comerciante</h2>
