@@ -77,7 +77,7 @@ const inicializarBD = async () => {
 
     const passHash = await bcrypt.hash('1234', 10);
 
-    // 1. Comerciante
+    // 1. Comerciante de ejemplo
     const uComCheck = await pool.query("SELECT id FROM usuarios WHERE email = 'cliente1@correo.com'");
     if (uComCheck.rows.length === 0) {
       const uCom = await pool.query(
@@ -147,6 +147,59 @@ app.get('/', (req, res) => {
     sistema: 'API Mercado Seguro - Grupo 4',
     modulos: ['Mercado Mayorista Perú', 'Central de Emergencias PNP', 'EsSalud Norte Chico'],
   });
+});
+
+// REGISTRO DE NUEVO COMERCIANTE (CONECTADO A MERCADO, PNP Y ESSALUD)
+app.post('/api/auth/registro', async (req, res) => {
+  const { nombre, email, password, dni, puesto, rubro, telefono, foto_puesto } = req.body;
+  try {
+    const existe = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+    if (existe.rows.length > 0) {
+      return res.status(400).json({ error: 'Ese correo ya está registrado. Inicia sesión.' });
+    }
+
+    const passHash = await bcrypt.hash(password, 10);
+
+    // 1. Crear usuario
+    const uRes = await pool.query(
+      'INSERT INTO usuarios (nombre, email, password) VALUES ($1, $2, $3) RETURNING id, nombre, email',
+      [nombre, email, passHash]
+    );
+    const nuevoUsuario = uRes.rows[0];
+
+    // 2. Asignar rol 'cliente' en los 3 módulos (Mercado, PNP y EsSalud)
+    await pool.query(
+      "INSERT INTO usuario_rol VALUES ($1,'mercado','cliente'), ($1,'pnp','cliente'), ($1,'essalud','cliente')",
+      [nuevoUsuario.id]
+    );
+
+    // 3. Crear su ficha de comerciante y puesto
+    const cRes = await pool.query(
+      `INSERT INTO comerciantes_interesados (id_usuario, nombre, dni, puesto, rubro, telefono, foto_puesto)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [nuevoUsuario.id, nombre, dni || '', puesto, rubro || 'Abarrotes', telefono || '', foto_puesto || null]
+    );
+
+    const token = jwt.sign({ id: nuevoUsuario.id, email: nuevoUsuario.email }, JWT_SECRET, { expiresIn: '8h' });
+
+    res.status(201).json({
+      ok: true,
+      token,
+      usuario: {
+        id: nuevoUsuario.id,
+        nombre: nuevoUsuario.nombre,
+        email: nuevoUsuario.email,
+        roles: [
+          { modulo: 'mercado', rol: 'cliente' },
+          { modulo: 'pnp', rol: 'cliente' },
+          { modulo: 'essalud', rol: 'cliente' },
+        ],
+        comerciante: cRes.rows[0],
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al registrar comerciante en Neon BD' });
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {
