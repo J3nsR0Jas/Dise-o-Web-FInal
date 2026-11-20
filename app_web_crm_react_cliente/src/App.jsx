@@ -13,8 +13,20 @@ const BADGE_STYLE = {
 
 export default function App() {
   const [usuario, setUsuario] = useState(null);
+  const [modoAuth, setModoAuth] = useState('login'); // 'login' | 'registro'
   const [cred, setCred] = useState({ email: 'cliente1@correo.com', password: '1234' });
+  const [reg, setReg] = useState({
+    nombre: '',
+    dni: '',
+    puesto: '',
+    rubro: 'Abarrotes',
+    telefono: '',
+    email: '',
+    password: '',
+    foto_puesto: '',
+  });
   const [errorLogin, setErrorLogin] = useState('');
+  const [cargandoAuth, setCargandoAuth] = useState(false);
 
   const [vista, setVista] = useState('mi-puesto');
   const [puestoData, setPuestoData] = useState(null);
@@ -38,6 +50,7 @@ export default function App() {
   const iniciarSesion = async (e) => {
     e.preventDefault();
     setErrorLogin('');
+    setCargandoAuth(true);
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
@@ -52,7 +65,43 @@ export default function App() {
       setUsuario(data.usuario);
     } catch {
       setErrorLogin('La API en Render está iniciando. Intenta de nuevo en 10 segundos.');
+    } finally {
+      setCargandoAuth(false);
     }
+  };
+
+  const registrarNuevoComerciante = async (e) => {
+    e.preventDefault();
+    setErrorLogin('');
+    setCargandoAuth(true);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/registro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reg),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorLogin(data.error || 'No se pudo completar el registro');
+        return;
+      }
+      setUsuario(data.usuario);
+      mostrarToast(`¡Bienvenido ${data.usuario.nombre}! Puesto ${reg.puesto} registrado en Neon BD`);
+    } catch {
+      setErrorLogin('Error de conexión con Render. Intenta de nuevo en unos segundos.');
+    } finally {
+      setCargandoAuth(false);
+    }
+  };
+
+  const subirFotoRegistro = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReg((prev) => ({ ...prev, foto_puesto: reader.result }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const cargarMiPuesto = async () => {
@@ -103,8 +152,8 @@ export default function App() {
   };
 
   const abrirFormularioDenuncia = () => {
-    const nombreCom = puestoData?.nombre || usuario?.nombre || 'Cliente 1';
-    const puestoCom = puestoData?.puesto || 'Puesto B-14';
+    const nombreCom = puestoData?.nombre || usuario?.nombre || 'Comerciante';
+    const puestoCom = puestoData?.puesto || 'Sin puesto';
     setFormDenuncia({
       denunciante: nombreCom,
       lugar: `Mercado Mayorista · ${puestoCom}`,
@@ -129,7 +178,7 @@ export default function App() {
       });
       const creada = await res.json();
       if (res.ok) {
-        mostrarToast(`Denuncia registrada en Neon · ${creada.codigo}`);
+        mostrarToast(`Denuncia registrada en Neon y enviada a PNP · ${creada.codigo}`);
         await cargarMiPuesto();
         setVista('mi-puesto');
       }
@@ -141,30 +190,132 @@ export default function App() {
   if (!usuario) {
     return (
       <div style={st.loginWrap}>
-        <div style={st.loginCard}>
+        <div style={{ ...st.loginCard, maxWidth: modoAuth === 'registro' ? '480px' : '390px' }}>
           <span style={st.kicker}>GRUPO 4 · MERCADO SEGURO</span>
           <h1 style={st.loginTitle}>Portal Comerciante</h1>
-          <p style={st.loginSub}>Un solo login para Mercado Mayorista, PNP y EsSalud</p>
-          <form onSubmit={iniciarSesion} style={st.form}>
-            <label style={st.label}>Correo</label>
-            <input
-              type="email"
-              value={cred.email}
-              onChange={(e) => setCred({ ...cred, email: e.target.value })}
-              style={st.input}
-              required
-            />
-            <label style={st.label}>Contraseña</label>
-            <input
-              type="password"
-              value={cred.password}
-              onChange={(e) => setCred({ ...cred, password: e.target.value })}
-              style={st.input}
-              required
-            />
-            {errorLogin && <p style={st.err}>{errorLogin}</p>}
-            <button type="submit" style={st.btnPrimary}>Ingresar</button>
-          </form>
+          <p style={st.loginSub}>Conectado a Mercado Mayorista, PNP y EsSalud</p>
+
+          <div style={st.tabsRow}>
+            <button
+              type="button"
+              onClick={() => { setModoAuth('login'); setErrorLogin(''); }}
+              style={modoAuth === 'login' ? st.tabActive : st.tabBtn}
+            >
+              Iniciar Sesión
+            </button>
+            <button
+              type="button"
+              onClick={() => { setModoAuth('registro'); setErrorLogin(''); }}
+              style={modoAuth === 'registro' ? st.tabActive : st.tabBtn}
+            >
+              Registrarme (Nuevo)
+            </button>
+          </div>
+
+          {modoAuth === 'login' ? (
+            <form onSubmit={iniciarSesion} style={st.form}>
+              <label style={st.label}>Correo</label>
+              <input
+                type="email"
+                value={cred.email}
+                onChange={(e) => setCred({ ...cred, email: e.target.value })}
+                style={st.input}
+                required
+              />
+              <label style={st.label}>Contraseña</label>
+              <input
+                type="password"
+                value={cred.password}
+                onChange={(e) => setCred({ ...cred, password: e.target.value })}
+                style={st.input}
+                required
+              />
+              {errorLogin && <p style={st.err}>{errorLogin}</p>}
+              <button type="submit" disabled={cargandoAuth} style={st.btnPrimary}>
+                {cargandoAuth ? 'Ingresando...' : 'Ingresar'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={registrarNuevoComerciante} style={st.form}>
+              <div style={st.grid2}>
+                <div>
+                  <label style={st.label}>Nombre completo *</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. María Quispe"
+                    value={reg.nombre}
+                    onChange={(e) => setReg({ ...reg, nombre: e.target.value })}
+                    style={st.input}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={st.label}>DNI *</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. 72345678"
+                    value={reg.dni}
+                    onChange={(e) => setReg({ ...reg, dni: e.target.value })}
+                    style={st.input}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={st.label}>N° de Puesto *</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Puesto D-08"
+                    value={reg.puesto}
+                    onChange={(e) => setReg({ ...reg, puesto: e.target.value })}
+                    style={st.input}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={st.label}>Rubro</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Frutas, Carnes..."
+                    value={reg.rubro}
+                    onChange={(e) => setReg({ ...reg, rubro: e.target.value })}
+                    style={st.input}
+                  />
+                </div>
+                <div>
+                  <label style={st.label}>Correo electrónico *</label>
+                  <input
+                    type="email"
+                    placeholder="maria@correo.com"
+                    value={reg.email}
+                    onChange={(e) => setReg({ ...reg, email: e.target.value })}
+                    style={st.input}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={st.label}>Contraseña *</label>
+                  <input
+                    type="password"
+                    placeholder="Crea tu clave"
+                    value={reg.password}
+                    onChange={(e) => setReg({ ...reg, password: e.target.value })}
+                    style={st.input}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={st.label}>Foto de tu puesto (opcional, se guarda en Neon BD)</label>
+                <input type="file" accept="image/*" onChange={subirFotoRegistro} style={st.input} />
+              </div>
+
+              {errorLogin && <p style={st.err}>{errorLogin}</p>}
+              <button type="submit" disabled={cargandoAuth} style={st.btnPrimary}>
+                {cargandoAuth ? 'Creando cuenta en Neon...' : 'Crear mi cuenta y entrar'}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -178,7 +329,7 @@ export default function App() {
           <span style={st.navTag}>1 sola cuenta · 3 módulos</span>
         </div>
         <div style={st.navRight}>
-          <span style={st.userBadge}>{usuario.nombre} · Comerciante</span>
+          <span style={st.userBadge}>{usuario.nombre} · {puestoData?.puesto || 'Comerciante'}</span>
           <button onClick={() => setUsuario(null)} style={st.btnExit}>Salir</button>
         </div>
       </header>
@@ -215,7 +366,7 @@ export default function App() {
               <div style={st.crumb}>Mercado Mayorista › Mi puesto</div>
               <div style={st.headerRow}>
                 <h2 style={st.h2}>
-                  Mi puesto · {puestoData?.puesto || 'B-14'} ({puestoData?.rubro || 'Abarrotes'})
+                  Mi puesto · {puestoData?.puesto || 'Sin asignar'} ({puestoData?.rubro || 'Abarrotes'})
                 </h2>
                 <button onClick={abrirFormularioDenuncia} style={st.btnDanger}>
                   🚨 Denunciar incidente
@@ -235,7 +386,7 @@ export default function App() {
                     <div>
                       <div>
                         <strong>Titular:</strong> {puestoData?.nombre || usuario.nombre} ·{' '}
-                        <strong>DNI:</strong> {puestoData?.dni || '71234567'}
+                        <strong>DNI:</strong> {puestoData?.dni || 'No registrado'}
                       </div>
                       <div style={{ marginTop: '8px' }}>
                         <label style={{ fontSize: '12px', fontWeight: 700, color: '#15803d', cursor: 'pointer' }}>
@@ -361,7 +512,7 @@ export default function App() {
                 )}
 
                 <button type="submit" disabled={enviando} style={st.btnPrimary}>
-                  {enviando ? 'Guardando en Neon...' : 'Enviar denuncia'}
+                  {enviando ? 'Guardando en Neon...' : 'Enviar denuncia a PNP'}
                 </button>
               </form>
             </div>
@@ -402,10 +553,13 @@ export default function App() {
 
 const st = {
   loginWrap: { minHeight: '100vh', background: 'linear-gradient(135deg,#0f3d24,#165c36)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', padding: '16px' },
-  loginCard: { background: '#fff', borderRadius: '14px', padding: '28px', width: '100%', maxWidth: '380px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)' },
+  loginCard: { background: '#fff', borderRadius: '14px', padding: '26px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)', transition: 'max-width 0.2s' },
   kicker: { fontSize: '11px', fontWeight: 700, color: '#16a34a', letterSpacing: '0.08em' },
   loginTitle: { margin: '4px 0', fontSize: '24px', color: '#0f3d24' },
-  loginSub: { margin: '0 0 18px 0', fontSize: '13px', color: '#4b6658' },
+  loginSub: { margin: '0 0 14px 0', fontSize: '13px', color: '#4b6658' },
+  tabsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: '#eef2f0', padding: '4px', borderRadius: '10px', marginBottom: '16px' },
+  tabBtn: { padding: '8px', border: 'none', borderRadius: '7px', background: 'transparent', color: '#4b6658', fontWeight: 700, cursor: 'pointer', fontSize: '13px' },
+  tabActive: { padding: '8px', border: 'none', borderRadius: '7px', background: '#16a34a', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: '13px' },
   shell: { minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, sans-serif', background: '#eef2f0', color: '#1b2a22' },
   navbar: { background: '#0f3d24', color: '#fff', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   navTag: { marginLeft: '12px', fontSize: '12px', background: 'rgba(255,255,255,0.15)', padding: '3px 10px', borderRadius: '999px' },
@@ -432,11 +586,11 @@ const st = {
   citaLink: { marginTop: '6px', fontSize: '13px', background: '#ecfdf3', padding: '5px 10px', borderRadius: '6px', color: '#14532d' },
   badge: { padding: '3px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' },
   formCard: { background: '#fff', padding: '20px', borderRadius: '10px', border: '1px solid #cfdcd5', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
+  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
   form: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  label: { fontSize: '13px', fontWeight: 700, color: '#355244', display: 'block', marginBottom: '4px' },
+  label: { fontSize: '12px', fontWeight: 700, color: '#355244', display: 'block', marginBottom: '3px' },
   preTag: { fontSize: '11px', color: '#15803d', marginLeft: '6px' },
-  input: { width: '100%', padding: '9px 11px', borderRadius: '8px', border: '1.5px solid #b9cbc1', fontSize: '14px', boxSizing: 'border-box' },
+  input: { width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #b9cbc1', fontSize: '13px', boxSizing: 'border-box' },
   inputPre: { width: '100%', padding: '9px 11px', borderRadius: '8px', border: '1.5px dashed #16a34a', background: '#ecfdf3', fontSize: '14px', boxSizing: 'border-box' },
   btnPrimary: { background: '#16a34a', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '14px', marginTop: '4px' },
   btnDanger: { background: '#dc2626', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' },
