@@ -9,7 +9,6 @@ const STORAGE_CARRITO = 'ms_cliente_carrito_v1';
 const STORAGE_CLIENTES = 'ms_clientes_locales_v1';
 const STORAGE_PEDIDOS = 'ms_pedidos_locales_v1';
 
-// Catálogo base del Mercado Mayorista cuando /api/productos aún no está publicado en Render
 const PRODUCTOS_BASE_MERCADO = [
   {
     id: 101,
@@ -72,23 +71,19 @@ function leerStorage(clave) {
 }
 
 export default function App() {
-  // Catálogo y estado de carga
   const [productos, setProductos] = useState([]);
   const [cargando, setCargando] = useState(true);
-  const [modoCatalogo, setModoCatalogo] = useState('api'); // 'api' | 'local'
+  const [modoCatalogo, setModoCatalogo] = useState('api');
   const [busqueda, setBusqueda] = useState('');
 
-  // Sesión del cliente
   const [usuario, setUsuario] = useState(() => {
     const guardado = localStorage.getItem('ms_cliente_user');
     return guardado ? JSON.parse(guardado) : null;
   });
   const [token, setToken] = useState(() => localStorage.getItem('ms_cliente_token') || '');
 
-  // Navegación entre vistas ('catalogo' | 'denunciar' | 'seguimiento' | 'pedidos')
   const [vistaActiva, setVistaActiva] = useState('catalogo');
 
-  // Modal de Login / Registro
   const [mostrarAuth, setMostrarAuth] = useState(false);
   const [esRegistro, setEsRegistro] = useState(false);
   const [mostrarPass, setMostrarPass] = useState(false);
@@ -96,11 +91,9 @@ export default function App() {
   const [msgAuth, setMsgAuth] = useState({ tipo: '', texto: '' });
   const [cargandoAuth, setCargandoAuth] = useState(false);
 
-  // Carrito interactivo y pedidos
   const [carrito, setCarrito] = useState(() => leerStorage(STORAGE_CARRITO));
   const [misPedidos, setMisPedidos] = useState([]);
 
-  // Denuncias y citas médicas sincronizadas con PNP y EsSalud
   const [denuncias, setDenuncias] = useState(() => leerStorage(STORAGE_DENUNCIAS));
   const [citas, setCitas] = useState(() => leerStorage(STORAGE_CITAS));
   const [formDenuncia, setFormDenuncia] = useState({
@@ -110,7 +103,6 @@ export default function App() {
     hay_lesionados: false,
   });
 
-  // Notificaciones con código de seguimiento
   const [guardando, setGuardando] = useState(false);
   const [ultimoCodigo, setUltimoCodigo] = useState('');
   const [alerta, setAlerta] = useState({ tipo: '', texto: '', codigo: '' });
@@ -119,7 +111,6 @@ export default function App() {
     localStorage.setItem(STORAGE_CARRITO, JSON.stringify(carrito));
   }, [carrito]);
 
-  // Escuchar cambios en tiempo real desde Central PNP / EsSalud
   useEffect(() => {
     const manejarCambioStorage = (e) => {
       if (e.key === STORAGE_DENUNCIAS) setDenuncias(leerStorage(STORAGE_DENUNCIAS));
@@ -135,13 +126,13 @@ export default function App() {
   };
 
   // =========================================================
-  // CARGA DE CATÁLOGO, PEDIDOS, DENUNCIAS Y CITAS
+  // CARGA DE CATÁLOGO, PEDIDOS, DENUNCIAS Y CITAS (NEON PRIORITARIO)
   // =========================================================
   const sincronizarTodo = useCallback(async () => {
     setCargando(true);
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-    // 1. Productos (/api/productos con respaldo automático si devuelve 404)
+    // 1. Productos
     try {
       const resProd = await fetch(`${API_URL}/api/productos`);
       if (resProd.ok) {
@@ -160,7 +151,7 @@ export default function App() {
       setCargando(false);
     }
 
-    // 2. Pedidos (/api/pedidos + almacenamiento local)
+    // 2. Pedidos
     let pedidosApi = [];
     try {
       const resPed = await fetch(`${API_URL}/api/pedidos`, { headers });
@@ -169,7 +160,7 @@ export default function App() {
         if (Array.isArray(dataPed)) pedidosApi = dataPed;
       }
     } catch {
-      // Usa respaldo local si /api/pedidos aún no existe
+      // Usa respaldo local
     }
 
     const localesPed = leerStorage(STORAGE_PEDIDOS);
@@ -182,7 +173,7 @@ export default function App() {
     });
     setMisPedidos(combinadosPed);
 
-    // 3. Denuncias (/api/denuncias + storage compartido con PNP)
+    // 3. Denuncias (Neon/Servidor sobrescribe lo local)
     let denunciasServidor = [];
     try {
       const resDen = await fetch(`${API_URL}/api/denuncias`, { headers });
@@ -196,10 +187,10 @@ export default function App() {
 
     const localesDen = leerStorage(STORAGE_DENUNCIAS);
     const mapaDen = new Map();
-    denunciasServidor.forEach((d) => {
+    localesDen.forEach((d) => {
       if (d && d.codigo) mapaDen.set(d.codigo, d);
     });
-    localesDen.forEach((d) => {
+    denunciasServidor.forEach((d) => {
       if (d && d.codigo) mapaDen.set(d.codigo, d);
     });
     const listaFinalDen = Array.from(mapaDen.values()).sort(
@@ -208,7 +199,7 @@ export default function App() {
     setDenuncias(listaFinalDen);
     localStorage.setItem(STORAGE_DENUNCIAS, JSON.stringify(listaFinalDen));
 
-    // 4. Citas EsSalud (/api/citas + storage compartido)
+    // 4. Citas EsSalud (Neon/Servidor sobrescribe lo local)
     let citasServidor = [];
     try {
       const resCit = await fetch(`${API_URL}/api/citas`, { headers });
@@ -222,10 +213,10 @@ export default function App() {
 
     const localesCit = leerStorage(STORAGE_CITAS);
     const mapaCit = new Map();
-    citasServidor.forEach((c) => {
+    localesCit.forEach((c) => {
       if (c && c.codigo_cita) mapaCit.set(c.codigo_cita, c);
     });
-    localesCit.forEach((c) => {
+    citasServidor.forEach((c) => {
       if (c && c.codigo_cita) mapaCit.set(c.codigo_cita, c);
     });
     const listaFinalCit = Array.from(mapaCit.values()).sort(
@@ -240,7 +231,7 @@ export default function App() {
   }, [sincronizarTodo]);
 
   // =========================================================
-  // REGISTRO / INICIO DE SESIÓN (MANEJA 404 Y 401 AUTOMÁTICAMENTE)
+  // REGISTRO / INICIO DE SESIÓN
   // =========================================================
   const manejarAuth = async (e) => {
     e.preventDefault();
@@ -262,7 +253,6 @@ export default function App() {
     };
 
     if (esRegistro) {
-      // 1. Intentar registrar en el servidor
       try {
         const res = await fetch(`${API_URL}/api/auth/register`, {
           method: 'POST',
@@ -277,7 +267,6 @@ export default function App() {
           return;
         }
 
-        // Si el backend responde 400/409 (correo duplicado), avisar
         if (res.status !== 404) {
           const errData = await res.json().catch(() => ({}));
           setMsgAuth({
@@ -288,10 +277,9 @@ export default function App() {
           return;
         }
       } catch {
-        // Si hay error de red, pasa al registro local
+        // Respaldo local
       }
 
-      // 2. Respaldo si /api/auth/register devuelve 404 en Render
       const cuentas = leerStorage(STORAGE_CLIENTES);
       if (cuentas.some((c) => c.email === correo)) {
         setMsgAuth({ tipo: 'error', texto: 'Este correo ya está registrado. Inicia sesión.' });
@@ -299,25 +287,14 @@ export default function App() {
         return;
       }
 
-      const nuevaCuenta = {
-        id: Date.now(),
-        nombre,
-        email: correo,
-        password,
-        rol: 'cliente',
-      };
+      const nuevaCuenta = { id: Date.now(), nombre, email: correo, password, rol: 'cliente' };
       localStorage.setItem(STORAGE_CLIENTES, JSON.stringify([nuevaCuenta, ...cuentas]));
       setEsRegistro(false);
-      setMsgAuth({
-        tipo: 'ok',
-        texto: '✅ Cuenta registrada correctamente. Ya puedes iniciar sesión.',
-      });
+      setMsgAuth({ tipo: 'ok', texto: '✅ Cuenta registrada correctamente. Ya puedes iniciar sesión.' });
       setCargandoAuth(false);
       return;
     }
 
-    // MODO INICIAR SESIÓN:
-    // 1. Intentar primero contra POST /api/auth/login de Render
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
@@ -327,21 +304,15 @@ export default function App() {
 
       if (res.ok) {
         const data = await res.json();
-        const userObj = data.usuario || {
-          id: Date.now(),
-          email: correo,
-          nombre,
-          rol: 'cliente',
-        };
+        const userObj = data.usuario || { id: Date.now(), email: correo, nombre, rol: 'cliente' };
         completarLogin(userObj, data.token || 'sesion-activa');
         setCargandoAuth(false);
         return;
       }
     } catch {
-      // Continúa validando contra las cuentas locales registradas
+      // Respaldo local
     }
 
-    // 2. Validar contra las cuentas locales creadas en el portal cliente
     const cuentasLocales = leerStorage(STORAGE_CLIENTES);
     const cuentaEncontrada = cuentasLocales.find(
       (c) => c.email === correo && c.password === password
@@ -376,7 +347,6 @@ export default function App() {
   // =========================================================
   const agregarAlCarrito = (producto) => {
     if (producto.stock === 0) return;
-
     setCarrito((prev) => {
       const existe = prev.find((item) => item.id === producto.id);
       if (existe) {
@@ -472,7 +442,7 @@ export default function App() {
   };
 
   // =========================================================
-  // REGISTRO DE DENUNCIA CONECTADA CON CENTRAL PNP Y ESSALUD
+  // REGISTRO DE DENUNCIA
   // =========================================================
   const abrirFormularioDenuncia = () => {
     if (!usuario) {
@@ -541,42 +511,40 @@ export default function App() {
         body: JSON.stringify(nuevaDenuncia),
       });
     } catch {
-      // Mantiene guardado en STORAGE_DENUNCIAS para sincronización en vivo con PNP/EsSalud
+      // Mantiene guardado local
     }
   };
 
   // =========================================================
-  // HELPERS DE LEYENDA OFICIAL DE ESTADOS
+  // HELPERS DE LEYENDA OFICIAL DE ESTADOS Y PASOS 1-2-3
   // =========================================================
   const obtenerClaseEstado = (estado) => {
-    switch (estado) {
-      case 'Registrado':
-        return 'registered';
-      case 'En investigación':
-      case 'Derivado':
-      case 'Derivada por PNP':
-      case 'Pendiente':
-        return 'process';
-      case 'Aceptado':
-      case 'Confirmada':
-      case 'Confirmado':
-        return 'approved';
-      case 'Rechazado':
-        return 'rejected';
-      default:
-        return 'registered';
+    const est = String(estado || '').toLowerCase();
+    if (est.includes('registrado')) return 'registered';
+    if (est.includes('investigación') || est.includes('investigacion') || est.includes('pendiente')) {
+      return 'process';
     }
+    if (
+      est.includes('aceptado') ||
+      est.includes('derivado') ||
+      est.includes('derivada') ||
+      est.includes('confirmad')
+    ) {
+      return 'approved';
+    }
+    if (est.includes('rechazado')) return 'rejected';
+    return 'registered';
   };
 
   const obtenerPasoFlujo = (denuncia) => {
+    const est = String(denuncia.estado || '').toLowerCase();
     const cita = citas.find(
       (c) => String(c.id_denuncia) === String(denuncia.id) || c.codigo_denuncia === denuncia.codigo
     );
-    if (cita && cita.estado === 'Confirmada') return 3;
-    if (cita || ['Derivado', 'Aceptado', 'Rechazado'].includes(denuncia.estado)) return 2;
+    if (cita || est.includes('derivad')) return 3;
+    if (est.includes('aceptado') || est.includes('rechazado')) return 2;
     return 1;
   };
-
   const productosFiltrados = productos.filter(
     (p) =>
       (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -952,7 +920,9 @@ export default function App() {
                       id="den-cliente-tipo"
                       className="input-client"
                       value={formDenuncia.tipo_incidente}
-                      onChange={(e) => setFormDenuncia({ ...formDenuncia, tipo_incidente: e.target.value })}
+                      onChange={(e) =>
+                        setFormDenuncia({ ...formDenuncia, tipo_incidente: e.target.value })
+                      }
                     >
                       <option value="Robo agravado en puesto">Robo agravado en puesto</option>
                       <option value="Hurto de mercadería">Hurto de mercadería</option>
@@ -970,7 +940,9 @@ export default function App() {
                       required
                       placeholder="Detalla lo sucedido, hora aproximada y características..."
                       value={formDenuncia.descripcion}
-                      onChange={(e) => setFormDenuncia({ ...formDenuncia, descripcion: e.target.value })}
+                      onChange={(e) =>
+                        setFormDenuncia({ ...formDenuncia, descripcion: e.target.value })
+                      }
                     />
                   </div>
 
@@ -979,7 +951,9 @@ export default function App() {
                       id="den-cliente-lesionados"
                       type="checkbox"
                       checked={formDenuncia.hay_lesionados}
-                      onChange={(e) => setFormDenuncia({ ...formDenuncia, hay_lesionados: e.target.checked })}
+                      onChange={(e) =>
+                        setFormDenuncia({ ...formDenuncia, hay_lesionados: e.target.checked })
+                      }
                     />
                     <label htmlFor="den-cliente-lesionados">
                       Reportar personas lesionadas (requiere derivación médica a EsSalud)
@@ -1048,6 +1022,7 @@ export default function App() {
                 <div className="panel-header-line">
                   <h3>🚓 Denuncias Registradas ({listaDenunciasMostrar.length})</h3>
                 </div>
+
                 {listaDenunciasMostrar.length === 0 ? (
                   <div className="empty-panel">No tienes denuncias registradas todavía.</div>
                 ) : (
@@ -1066,7 +1041,9 @@ export default function App() {
                         >
                           <div className="status-card-top">
                             <div>
-                              <span className="card-code">{d.codigo} · {d.puesto}</span>
+                              <span className="card-code">
+                                {d.codigo} · {d.puesto}
+                              </span>
                               <h4>{d.tipo_incidente}</h4>
                             </div>
                             <span className={`badge badge-${color}`}>{d.estado}</span>
@@ -1079,11 +1056,12 @@ export default function App() {
                             </div>
                             <div className={`step-connector ${paso >= 2 ? 'done' : ''}`}></div>
                             <div className={`step-item ${paso >= 2 ? 'done' : ''}`}>
-                              <span>2</span> {d.estado}
+                              <span>{color === 'rejected' ? '✕' : '2'}</span> {d.estado}
                             </div>
                             <div className={`step-connector ${paso >= 3 ? 'done' : ''}`}></div>
                             <div className={`step-item ${paso >= 3 ? 'done' : ''}`}>
-                              <span>3</span> {citaVinculada ? `Cita ${citaVinculada.codigo_cita}` : 'EsSalud'}
+                              <span>3</span>{' '}
+                              {citaVinculada ? `Cita ${citaVinculada.codigo_cita}` : 'EsSalud'}
                             </div>
                           </div>
                         </div>
@@ -1097,6 +1075,7 @@ export default function App() {
                 <div className="panel-header-line">
                   <h3>🏥 Mis Citas Médicas en EsSalud ({citasCliente.length})</h3>
                 </div>
+
                 {citasCliente.length === 0 ? (
                   <div className="empty-panel">
                     Aún no tienes citas médicas derivadas desde la PNP.
@@ -1104,13 +1083,20 @@ export default function App() {
                 ) : (
                   <div className="cards-column">
                     {citasCliente.map((c) => (
-                      <div key={c.codigo_cita} className={`status-card border-${obtenerClaseEstado(c.estado)}`}>
+                      <div
+                        key={c.codigo_cita}
+                        className={`status-card border-${obtenerClaseEstado(c.estado)}`}
+                      >
                         <div className="status-card-top">
                           <div>
-                            <span className="card-code">{c.codigo_cita} · Denuncia {c.codigo_denuncia}</span>
+                            <span className="card-code">
+                              {c.codigo_cita} · Denuncia {c.codigo_denuncia}
+                            </span>
                             <h4>{c.especialidad}</h4>
                           </div>
-                          <span className={`badge badge-${obtenerClaseEstado(c.estado)}`}>{c.estado}</span>
+                          <span className={`badge badge-${obtenerClaseEstado(c.estado)}`}>
+                            {c.estado}
+                          </span>
                         </div>
                         <div className="meta-strip">
                           <span>📅 Horario: <strong>{c.fecha_cita}</strong></span>
@@ -1139,7 +1125,7 @@ export default function App() {
 
             <div className="surface-card">
               <div className="panel-header-line">
-                <h3>📦 Pedidos Registrados ({misPedidos.length})</h3>
+                <h3>Pedidos Registrados ({misPedidos.length})</h3>
               </div>
 
               {misPedidos.length === 0 ? (
@@ -1149,7 +1135,8 @@ export default function App() {
               ) : (
                 <div className="cards-column">
                   {misPedidos.map((ped) => {
-                    const items = typeof ped.items === 'string' ? JSON.parse(ped.items) : ped.items || [];
+                    const items =
+                      typeof ped.items === 'string' ? JSON.parse(ped.items) : ped.items || [];
                     const codPed = `PED-${String(ped.id).slice(-5).padStart(5, '0')}`;
 
                     return (
@@ -1164,12 +1151,15 @@ export default function App() {
                             <span className="card-code">{codPed}</span>
                             <h4>Total: S/ {Number(ped.total || 0).toFixed(2)}</h4>
                           </div>
-                          <span className="badge badge-approved">{ped.estado || 'Confirmado'}</span>
+                          <span className="badge badge-approved">
+                            {ped.estado || 'Confirmado'}
+                          </span>
                         </div>
                         <div className="meta-strip">
                           {items.map((it, idx) => (
                             <span key={idx}>
-                              • <strong>{it.nombre || `Producto #${it.producto_id}`}</strong> ({it.cantidad} × S/ {Number(it.precio).toFixed(2)})
+                              • <strong>{it.nombre || `Producto #${it.producto_id}`}</strong> (
+                              {it.cantidad} × S/ {Number(it.precio).toFixed(2)})
                             </span>
                           ))}
                         </div>
@@ -1187,7 +1177,12 @@ export default function App() {
           MODAL DE INICIO DE SESIÓN / REGISTRO CLIENTE
           ========================================================= */}
       {mostrarAuth && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auth-modal-title"
+        >
           <div className="modal-card animate-pop">
             <div className="modal-top">
               <h2 id="auth-modal-title">{esRegistro ? 'Crear Cuenta Cliente' : 'Iniciar Sesión'}</h2>
@@ -1257,7 +1252,7 @@ export default function App() {
                   className="auth-feedback-msg"
                   style={
                     msgAuth.tipo === 'ok'
-                      ? { background: '#ecfdf5', color: '#064e3b', borderColor: '#10b981' }
+                      ? { background: '#ecfdf5', color: '#065f46', borderColor: '#10b981' }
                       : undefined
                   }
                 >
